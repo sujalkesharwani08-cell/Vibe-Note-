@@ -80,7 +80,7 @@
       btn.disabled = true;
       status.textContent = 'Reel sun raha hoon... 5-10 sec ruk...';
       try {
-        const res = await fetch('/api/detect', {
+        const res = await fetch('/api/find', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url })
