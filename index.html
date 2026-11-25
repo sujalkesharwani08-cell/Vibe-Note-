@@ -11,10 +11,12 @@
     h1 { font-size: 24px; font-weight: 700; margin: 10px 0 4px; letter-spacing: -0.5px; }
     p.sub { color: #78736A; font-size: 14px; margin: 0 0 20px; }
     .card { background: #FFFFFF; border: 1px solid #EAE5DC; border-radius: 16px; padding: 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.03); margin-bottom: 16px; }
-    .file-label { display: block; width: 100%; padding: 18px; border: 1.5px dashed #C8C0B2; border-radius: 12px; text-align: center; background: #FAF8F5; font-size: 14px; font-weight: 600; color: #1F1E1C; cursor: pointer; }
-    input[type="file"] { display: none; }
-    input[type="text"] { width: 100%; padding: 10px 12px; border: 1px solid #DED8CC; border-radius: 12px; font-size: 14px; background: #FAF8F5; outline: none; margin-bottom: 12px; }
-    .status { font-size: 13px; color: #78736A; margin-top: 12px; text-align: center; }
+    input { width: 100%; padding: 14px; border: 1px solid #DED8CC; border-radius: 12px; font-size: 15px; background: #FAF8F5; outline: none; }
+    input:focus { border-color: #1F1E1C; background: #FFF; }
+    button { width: 100%; margin-top: 12px; padding: 14px; background: #1F1E1C; color: #FAF8F5; border: none; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    button:disabled { opacity: 0.5; }
+    .status { font-size: 13px; color: #78736A; margin-top: 10px; text-align: center; }
+    .search-box { margin-bottom: 12px; padding: 10px 12px; font-size: 14px; }
     .song-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #F0ECE3; }
     .song-item:last-child { border-bottom: none; }
     .cover { width: 52px; height: 52px; border-radius: 10px; background: #EAE5DC; object-fit: cover; flex-shrink: 0; }
@@ -30,17 +32,15 @@
 <body>
   <div class="app">
     <h1>Vibe Note</h1>
-    <p class="sub">Downloaded Reel video ya audio select kar, gaana save kar.</p>
+    <p class="sub">Instagram Reel ka link paste kar, gaana save kar.</p>
     <div class="card">
-      <label class="file-label">
-        + Select Reel Video / Audio File
-        <input type="file" id="mediaFile" accept="video/*,audio/*" onchange="processFile(this.files[0])" />
-      </label>
-      <div class="status" id="status">Instagram se Reel download karke yahan select kar.</div>
+      <input type="url" id="reelUrl" placeholder="https://www.instagram.com/reel/..." />
+      <button id="findBtn" onclick="findSong()">Identify & Save Song</button>
+      <div class="status" id="status"></div>
     </div>
     <div class="card" id="historyCard" style="display:none;">
       <div style="font-size:12px;font-weight:700;color:#78736A;margin-bottom:8px;letter-spacing:0.5px;">SAVED VIBES</div>
-      <input type="text" id="searchInput" placeholder="Search saved songs or artists..." oninput="render()" />
+      <input type="text" id="searchInput" class="search-box" placeholder="Search saved songs or artists..." oninput="render()" />
       <div id="list"></div>
     </div>
   </div>
@@ -72,30 +72,30 @@
     }
     render();
 
-    async function processFile(file) {
-      if (!file) return;
+    async function findSong() {
+      const url = document.getElementById('reelUrl').value.trim();
       const status = document.getElementById('status');
-      status.textContent = 'Audio nikal kar gaana pehchan raha hoon...';
+      const btn = document.getElementById('findBtn');
+      if (!url) return;
+      btn.disabled = true;
+      status.textContent = 'Reel sun raha hoon... 10-15 sec ruk...';
       try {
-        const slice = file.slice(0, 900 * 1024);
-        const reader = new FileReader();
-        reader.onload = async () => {
-          const base64 = reader.result.split(',')[1];
-          const res = await fetch('/api/scan', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ audioBase64: base64 })
-          });
-          const data = await res.json();
-          if (!res.ok) throw new Error(data.error || 'Failed');
-          saved.unshift(data);
-          localStorage.setItem('vibe_notes', JSON.stringify(saved));
-          render();
-          status.textContent = 'Mil gaya aur save ho gaya!';
-        };
-        reader.readAsDataURL(slice);
+        const res = await fetch('/api/apify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        saved.unshift(data);
+        localStorage.setItem('vibe_notes', JSON.stringify(saved));
+        render();
+        document.getElementById('reelUrl').value = '';
+        status.textContent = 'Mil gaya aur save ho gaya!';
       } catch (e) {
         status.textContent = e.message;
+      } finally {
+        btn.disabled = false;
       }
     }
   </script>
