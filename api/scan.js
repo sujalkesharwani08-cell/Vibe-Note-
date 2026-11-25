@@ -7,20 +7,33 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    const { audioBase64 } = req.body || {};
-    if (!audioBase64) return res.status(400).json({ error: 'File nahi mili!' });
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const rawBody = Buffer.concat(chunks);
 
-    const audioBuffer = Buffer.from(audioBase64, 'base64');
+    if (!rawBody.length) {
+      return res.status(400).json({ error: 'Audio nahi mila, dobara try kar!' });
+    }
+
+    const headerEnd = rawBody.indexOf(Buffer.from('\r\n\r\n'));
+    const footerStart = rawBody.lastIndexOf(Buffer.from('\r\n--'));
+    const audioBuffer = (headerEnd !== -1 && footerStart > headerEnd)
+      ? rawBody.subarray(headerEnd + 4, footerStart)
+      : rawBody;
+
     const host = process.env.ACR_HOST;
     const accessKey = process.env.ACR_ACCESS_KEY;
     const accessSecret = process.env.ACR_SECRET_KEY;
     const timestamp = Math.floor(Date.now() / 1000);
 
     const stringToSign = ['POST', '/v1/identify', accessKey, 'audio', '1', timestamp].join('\n');
-    const signature = crypto.createHmac('sha1', accessSecret).update(Buffer.from(stringToSign, 'utf-8')).digest('base64');
+    const signature = crypto
+      .createHmac('sha1', accessSecret)
+      .update(Buffer.from(stringToSign, 'utf-8'))
+      .digest('base64');
 
     const formData = new FormData();
-    formData.append('sample', new Blob([audioBuffer]), 'sample.mp4');
+    formData.append('sample', new Blob([audioBuffer]), 'mic.webm');
     formData.append('access_key', accessKey);
     formData.append('data_type', 'audio');
     formData.append('signature_version', '1');
@@ -32,7 +45,7 @@ module.exports = async (req, res) => {
     const acrData = await acrRes.json();
 
     if (!acrData.metadata?.music?.length) {
-      return res.status(404).json({ error: 'Is clip mein koi official gaana nahi mila.' });
+      return res.status(404).json({ error: 'Gaana saaf sunai nahi diya — volume badha kar 6 sec suna!' });
     }
 
     const track = acrData.metadata.music[0];
@@ -52,9 +65,10 @@ module.exports = async (req, res) => {
       });
       const { access_token } = await tokenRes.json();
 
-      const searchRes = await fetch(`https://api.spotify.com/v1/search?q=${encodeURIComponent(title + ' ' + artist)}&type=track&limit=1`, {
-        headers: { 'Authorization': `Bearer ${access_token}` }
-      });
+      const searchRes = await fetch(
+        `https://api.spotify.com/v1/search?q=${encodeURIComponent(title + ' ' + artist)}&type=track&limit=1`,
+        { headers: { 'Authorization': `Bearer ${access_token}` } }
+      );
       const searchData = await searchRes.json();
       const spTrack = searchData.tracks?.items?.[0];
       if (spTrack) {
@@ -65,6 +79,6 @@ module.exports = async (req, res) => {
 
     return res.status(200).json({ title, artist, spotifyUrl, cover });
   } catch (err) {
-    return res.status(500).json({ error: 'Error: ' + err.message });
+    return res.status(500).json({ error: 'Server error: ' + err.message });
   }
 };
